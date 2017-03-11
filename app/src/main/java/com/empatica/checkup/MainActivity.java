@@ -1,0 +1,985 @@
+package com.empatica.checkup;
+
+import android.Manifest;
+import android.app.Activity;
+import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothDevice;
+import android.content.DialogInterface;
+import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.graphics.Color;
+import android.net.Uri;
+import android.os.Bundle;
+import android.os.Environment;
+import android.os.Handler;
+import android.provider.Settings;
+import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
+import android.support.design.widget.TabLayout;
+import android.support.v4.app.ActivityCompat;
+import android.support.v4.app.Fragment;
+import android.support.v4.app.FragmentManager;
+import android.support.v4.app.FragmentPagerAdapter;
+import android.support.v4.content.ContextCompat;
+import android.support.v4.view.ViewPager;
+import android.support.v7.app.AlertDialog;
+import android.support.v7.app.AppCompatActivity;
+import android.text.TextUtils;
+import android.util.Log;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.RelativeLayout;
+import android.widget.TextView;
+import android.widget.Toast;
+
+import com.empatica.empalink.ConnectionNotAllowedException;
+import com.empatica.empalink.EmpaDeviceManager;
+import com.empatica.empalink.config.EmpaSensorStatus;
+import com.empatica.empalink.config.EmpaSensorType;
+import com.empatica.empalink.config.EmpaStatus;
+import com.empatica.empalink.delegate.EmpaDataDelegate;
+import com.empatica.empalink.delegate.EmpaStatusDelegate;
+import com.github.mikephil.charting.charts.LineChart;
+import com.github.mikephil.charting.components.Legend;
+import com.github.mikephil.charting.components.XAxis;
+import com.github.mikephil.charting.components.YAxis;
+import com.github.mikephil.charting.data.Entry;
+import com.github.mikephil.charting.data.LineData;
+import com.github.mikephil.charting.data.LineDataSet;
+import com.github.mikephil.charting.utils.ColorTemplate;
+
+import android.support.design.widget.FloatingActionButton;
+import android.support.design.widget.Snackbar;
+import android.support.design.widget.NavigationView;
+import android.support.v4.view.GravityCompat;
+import android.support.v4.widget.DrawerLayout;
+import android.support.v7.app.ActionBarDrawerToggle;
+import android.support.v7.widget.Toolbar;
+import android.view.Menu;
+import android.view.MenuItem;
+
+import org.apache.poi.hssf.usermodel.HSSFWorkbook;
+import org.apache.poi.poifs.filesystem.POIFSFileSystem;
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.ss.util.CellUtil;
+
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+
+
+public class MainActivity extends AppCompatActivity
+        implements NavigationView.OnNavigationItemSelectedListener  {
+
+    private SectionsPagerAdapter mSectionsPagerAdapter;
+    private ViewPager mViewPager;
+
+
+    public LineChart mChart1;
+    public LineChart mChart2;
+    public LineChart mChart3;
+    public LineChart mChart4;
+
+    private float hrData =0;
+    public File dirFile = null;
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
+        Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
+        setSupportActionBar(toolbar);
+
+        FloatingActionButton fab = (FloatingActionButton) findViewById(R.id.fab);
+        fab.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                Snackbar.make(view, "Replace with your own action", Snackbar.LENGTH_LONG)
+                        .setAction("Action", null).show();
+            }
+        });
+
+        DrawerLayout drawer = (DrawerLayout) findViewById(R.id.drawer_layout);
+        ActionBarDrawerToggle toggle = new ActionBarDrawerToggle(
+                this, drawer, toolbar, R.string.navigation_drawer_open, R.string.navigation_drawer_close);
+        drawer.setDrawerListener(toggle);
+        toggle.syncState();
+
+        NavigationView navigationView = (NavigationView) findViewById(R.id.nav_view);
+        navigationView.setNavigationItemSelectedListener(this);
+
+        mSectionsPagerAdapter = new SectionsPagerAdapter(getSupportFragmentManager());
+
+        // Set up the ViewPager with the sections adapter.
+        mViewPager = (ViewPager) findViewById(R.id.container);
+        mViewPager.setAdapter(mSectionsPagerAdapter);
+        mViewPager.setOffscreenPageLimit((mSectionsPagerAdapter.getCount() > 1 ? mSectionsPagerAdapter.getCount() - 1 : 1));
+
+        TabLayout tabLayout = (TabLayout) findViewById(R.id.tabs);
+        tabLayout.setupWithViewPager(mViewPager);
+
+        mChart1 = new LineChart(this);
+        mChart1 = createGraph(mChart1, "BVP");
+
+        mChart2 = new LineChart(this);
+        mChart2 = createGraph(mChart2, "EDA");
+
+        mChart3 = new LineChart(this);
+        mChart3 = createGraph(mChart3, "HR");
+
+        mChart4 = new LineChart(this);
+        mChart4= createGraph(mChart4, "IBI");
+
+        String s = getIntent().getStringExtra("LOAD");
+
+        if(s!=null){
+            File myFile = new File(s);
+            Log.d("test","s");
+            Log.d("test",String.valueOf(myFile));
+            loadSession(myFile);
+        }
+
+        //endregion
+
+    }
+
+    public void saveSession(int n, float val){
+        String folder_main = "CheckUp";
+
+        File dir = new File(Environment.getExternalStorageDirectory(), folder_main);
+
+        if (!dir.exists()) {
+            dir.mkdir();
+        }
+
+        File myFile = new File(dir, "Session1.xls");
+        if (dir.list().length>0 && n!=0) {
+            myFile = dirFile;
+        }
+
+        if (n==0) {
+//            FileInputStream fin = null;
+            FileOutputStream fos = null;
+            if (dir.list().length==0) {
+                myFile = new File(dir, "Session1.xls");
+            }else if (dir.list().length!=0){
+                myFile = new File(dir, "Session" + String.valueOf(dir.list().length+1) + ".xls");
+            }
+
+//            try {
+////                fin = new FileInputStream(myFile);
+//            }catch(IOException e){
+//                System.out.println("fileinput"+e);
+//            }
+            dirFile = myFile;
+
+            try{
+                Workbook wb = new HSSFWorkbook();
+
+                Sheet bvp_sheet = wb.createSheet("BVP");
+                Row bvp_row = bvp_sheet.createRow(0);
+                Cell bvp_cell = bvp_row.createCell(0);
+
+                Sheet eda_sheet = wb.createSheet("EDA");
+                Row eda_row = eda_sheet.createRow(0);
+                Cell eda_cell = eda_row.createCell(0);
+
+                Sheet hr_sheet = wb.createSheet("Heart Rate");
+                Row hr_row = hr_sheet.createRow(0);
+                Cell hr_cell = hr_row.createCell(0);
+
+                Sheet ibi_sheet = wb.createSheet("IBI");
+                Row ibi_row = ibi_sheet.createRow(0);
+                Cell ibi_cell = ibi_row.createCell(0);
+//                fin.close();
+                fos = new FileOutputStream(myFile);
+                wb.write(fos);
+                fos.close();
+            }catch (IOException e){
+                System.out.println("wb io" + e);
+//            }catch (InvalidFormatException i){
+//                System.out.println("wb invformat"+i);
+            }finally{
+//                org.apache.commons.io.IOUtils.closeQuietly(fin);
+                org.apache.commons.io.IOUtils.closeQuietly(fos);
+            }
+
+        }
+        if (n!=0) {
+            FileInputStream fin = null;
+            FileOutputStream fos = null;
+            try {
+                fin=new FileInputStream(myFile);
+                // Create a POIFSFileSystem object
+                POIFSFileSystem myFileSystem = new POIFSFileSystem(fin);
+
+                // Create a workbook using the File System
+                HSSFWorkbook wb = new HSSFWorkbook(myFileSystem);
+                if(n==1){
+                    int v=0;
+                    Sheet sheet = wb.getSheetAt(0);
+                    if((sheet.getPhysicalNumberOfRows()%65536==0)&&(sheet.getPhysicalNumberOfRows()!=0)){
+                        v=sheet.getPhysicalNumberOfRows()/65536;
+                    }
+                    if (sheet.getPhysicalNumberOfRows()==0){
+                        Row row = sheet.createRow(0);
+                        Cell cell = row.createCell(0)
+                                ;
+                        cell.setCellValue(val);
+                    }else{
+                        Row row = sheet.createRow(sheet.getLastRowNum()+1);
+                        Cell cell = row.createCell(v);
+                        cell.setCellValue(val);
+                    }
+
+                }
+                if(n==2){
+                    int v=0;
+                    Sheet sheet = wb.getSheetAt(1);
+                    if((sheet.getPhysicalNumberOfRows()%65536==0)&&(sheet.getPhysicalNumberOfRows()!=0)){
+                        v=sheet.getPhysicalNumberOfRows()/65536;
+                    }
+                    if (sheet.getPhysicalNumberOfRows()==0){
+                        Row row = sheet.createRow(0);
+                        Cell cell = row.createCell(0);
+                        cell.setCellValue(val);
+                    }else{
+                        Row row = sheet.createRow(sheet.getLastRowNum()+1);
+                        Cell cell = row.createCell(v);
+                        cell.setCellValue(val);
+                    }
+                }
+                if(n==3){
+                    int v=0;
+                    Sheet sheet = wb.getSheetAt(2);
+                    if((sheet.getPhysicalNumberOfRows()%65536==0)&&(sheet.getPhysicalNumberOfRows()!=0)){
+                        v=sheet.getPhysicalNumberOfRows()/65536;
+                    }
+                    if (sheet.getPhysicalNumberOfRows()==0){
+                        Row row = sheet.createRow(0);
+                        Cell cell = row.createCell(0);
+                        cell.setCellValue(val);
+                    }else{
+                        Row row = sheet.createRow(sheet.getLastRowNum()+1);
+                        Cell cell = row.createCell(v);
+                        cell.setCellValue(val);
+                    }
+                }
+                if(n==4){
+                    int v=0;
+                    Sheet sheet = wb.getSheetAt(3);
+                    if((sheet.getPhysicalNumberOfRows()%65536==0)&&(sheet.getPhysicalNumberOfRows()!=0)){
+                        v=sheet.getPhysicalNumberOfRows()/65536;
+                    }
+                    if (sheet.getPhysicalNumberOfRows()==0){
+                        Row row = sheet.createRow(0);
+                        Cell cell = row.createCell(0);
+                        cell.setCellValue(val);
+                    }else{
+                        Row row = sheet.createRow(sheet.getLastRowNum()+1);
+                        Cell cell = row.createCell(v);
+                        cell.setCellValue(val);
+                    }
+                }
+                fin.close();
+                fos = new FileOutputStream(myFile);
+                wb.write(fos);
+                fos.close();
+
+            }catch (IOException e){
+                System.out.println(e);
+//            }catch (InvalidFormatException i){
+//                System.out.println(i);
+            }finally {
+                org.apache.commons.io.IOUtils.closeQuietly(fin);
+                org.apache.commons.io.IOUtils.closeQuietly(fos);
+            }
+        }
+    }
+
+    public LineChart createGraph(LineChart mChart, String name){
+        mChart.setDescription(name);
+        mChart.setHighlightPerTapEnabled(true);
+        mChart.setTouchEnabled(true);
+        mChart.setDragEnabled(true);
+        mChart.setScaleEnabled(true);
+        mChart.setDrawGridBackground(true);
+
+        //enable pinch zoom to avoid scaling axis
+        mChart.setPinchZoom(true);
+        //colour background
+        mChart.setBackgroundColor(Color.GRAY);
+
+        LineData data_G1 = new LineData();
+        data_G1.setValueTextColor(Color.WHITE);
+        mChart.setData(data_G1);
+
+        Legend L1_G1 = mChart.getLegend();
+        L1_G1.setForm(Legend.LegendForm.LINE);
+        L1_G1.setTextColor(Color.BLACK);
+
+        XAxis x1_G1 = mChart.getXAxis();
+        x1_G1.setTextColor(Color.BLACK);
+        x1_G1.setDrawGridLines(true);
+        x1_G1.setAvoidFirstLastClipping(true);
+
+        YAxis y1_G1 = mChart.getAxisLeft();
+        y1_G1.setTextColor(Color.BLACK);
+        y1_G1.setDrawGridLines(true);
+        y1_G1.setAxisMaxValue(80);
+        y1_G1.setAxisMinValue(-50);
+
+        YAxis y1_2_G1 = mChart.getAxisRight();
+        y1_2_G1.setEnabled(false);
+
+        return mChart;
+    }
+
+    public LineDataSet createDataSet(String name)    {
+
+        LineDataSet graph_data = new LineDataSet(null,name);
+        graph_data.setDrawCubic(true); // sets drawing mode to cubic
+        graph_data.setCubicIntensity(0.2f);
+        graph_data.setAxisDependency(YAxis.AxisDependency.LEFT);
+        graph_data.setColor(ColorTemplate.getHoloBlue());//setting the line color theme to blue
+        graph_data.setCircleColor(ColorTemplate.getHoloBlue());// each plotting point color
+        graph_data.setLineWidth(1f);
+        graph_data.setFillAlpha(60);
+        graph_data.setFillColor(ColorTemplate.getHoloBlue());// fill of the line
+        graph_data.setHighLightColor(Color.rgb(244,177,177));
+        graph_data.setValueTextColor(Color.BLACK);
+        graph_data.setValueTextSize(7.5f);
+
+        return graph_data;
+    }
+
+    public LineChart updateGraph(float val, LineChart mChart, String name){
+        LineData data = mChart.getData();
+        if (data != null)
+        {
+            LineDataSet set = (LineDataSet) data.getDataSetByIndex(0);
+
+            if(set == null) {
+                // creation of data set if there is not data
+                set = createDataSet(name);
+                data.addDataSet(set);
+            }
+
+            if(name == "HR"){
+                if(hrData <=59)
+                {
+                    data.addXValue("");
+                    data.addEntry(new Entry(60, set.getEntryCount()), 0);
+                }
+                else {
+                    data.addXValue("");
+                    data.addEntry(new Entry(hrData, set.getEntryCount()), 0);
+                }
+            }else{
+                // adding x value to the data set
+                data.addXValue("");
+                //adding new x value to the data set
+                data.addEntry(new Entry(val,set.getEntryCount()),0);
+            }
+            //notify chart data has changed
+            mChart.notifyDataSetChanged();
+            mChart.setVisibleXRange(1,20);
+            mChart.moveViewToX(data.getXValCount() - 5);
+        }
+
+        return mChart;
+
+    }
+
+    public void loadSession(File myFile) {
+        FileInputStream fin = null;
+        FileOutputStream fos = null;
+        try {
+            fin = new FileInputStream(myFile);
+            // Create a POIFSFileSystem object
+            POIFSFileSystem myFileSystem = new POIFSFileSystem(fin);
+
+            // Create a workbook using the File System
+            HSSFWorkbook wb = new HSSFWorkbook(myFileSystem);
+            int columnIndex = 0;
+
+            for(int n=0; n<=3; n++) {
+                Sheet sheet = wb.getSheetAt(n);
+                for (int rowIndex = 0; rowIndex<sheet.getPhysicalNumberOfRows(); rowIndex++){
+                    Row row = CellUtil.getRow(rowIndex, sheet);
+                    Cell cell = CellUtil.getCell(row, columnIndex);
+                    if (n == 0) {
+                        updateGraph((float) cell.getNumericCellValue(), mChart1, "BVP");
+                    }else if (n == 1) {
+                        updateGraph((float) cell.getNumericCellValue(), mChart2, "EDA");
+                    }else if (n == 2) {
+                        updateGraph((float) cell.getNumericCellValue(), mChart3, "HR");
+                    }else if (n == 3) {
+                        updateGraph((float) cell.getNumericCellValue(), mChart4, "IBI");
+                    }
+                }
+            }
+        } catch (IOException e){
+            System.out.println(e);
+//            }catch (InvalidFormatException i){
+//                System.out.println(i);
+        } finally {
+            org.apache.commons.io.IOUtils.closeQuietly(fin);
+            org.apache.commons.io.IOUtils.closeQuietly(fos);
+        }
+    }
+
+    @Override
+    public void onBackPressed() {
+        DrawerLayout drawer = (DrawerLayout) findViewById(R.id.drawer_layout);
+        if (drawer.isDrawerOpen(GravityCompat.START)) {
+            drawer.closeDrawer(GravityCompat.START);
+        } else {
+            super.onBackPressed();
+        }
+    }
+
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        // Inflate the menu; this adds items to the action bar if it is present.
+        getMenuInflater().inflate(R.menu.main, menu);
+        return true;
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        // Handle action bar item clicks here. The action bar will
+        // automatically handle clicks on the Home/Up button, so long
+        // as you specify a parent activity in AndroidManifest.xml.
+        int id = item.getItemId();
+
+        //noinspection SimplifiableIfStatement
+        if (id == R.id.action_settings) {
+            return true;
+        }
+
+        if (id == R.id.past_sessions) {
+            startActivity (new Intent (this, PastSessions.class));
+            return true;
+        }
+
+        return super.onOptionsItemSelected(item);
+    }
+
+    @SuppressWarnings("StatementWithEmptyBody")
+    @Override
+    public boolean onNavigationItemSelected(MenuItem item) {
+        // Handle navigation view item clicks here.
+        int id = item.getItemId();
+
+        if (id == R.id.nav_camera) {
+            // Handle the camera action
+        } else if (id == R.id.nav_gallery) {
+
+        } else if (id == R.id.nav_slideshow) {
+
+        } else if (id == R.id.nav_manage) {
+
+        } else if (id == R.id.nav_share) {
+
+        } else if (id == R.id.nav_send) {
+
+        }
+
+        DrawerLayout drawer = (DrawerLayout) findViewById(R.id.drawer_layout);
+        drawer.closeDrawer(GravityCompat.START);
+        return true;
+    }
+
+    /**
+     * A placeholder fragment containing a simple view.
+     */
+    public static class PlaceholderFragment extends Fragment
+            implements EmpaDataDelegate, EmpaStatusDelegate {
+        /**
+         * The fragment argument representing the section number for this
+         * fragment.
+         */
+
+        private static final int REQUEST_ENABLE_BT = 1;
+        private static final int REQUEST_PERMISSION_ACCESS_COARSE_LOCATION = 1;
+
+        private static final long STREAMING_TIME = 100000; // Stops streaming 10 seconds after connection
+
+        private static final String EMPATICA_API_KEY = "1482f602113740c0aac7310e724e3a92"; // TODO insert your API Key here
+
+        private EmpaDeviceManager deviceManager = null;
+
+        private TextView accel_xLabel;
+        private TextView accel_yLabel;
+        private TextView accel_zLabel;
+        private TextView bvpLabel;
+        private TextView edaLabel;
+        private TextView ibiLabel;
+        private TextView temperatureLabel;
+        private TextView batteryLabel;
+        private TextView statusLabel;
+        private TextView deviceNameLabel;
+        private RelativeLayout dataCnt;
+        public PlaceholderFragment() {
+        }
+
+        /**
+         * Returns a new instance of this fragment for the given section
+         * number.
+         */
+        public static PlaceholderFragment newInstance(int sectionNumber) {
+            PlaceholderFragment fragment = new PlaceholderFragment();
+            Bundle args = new Bundle();
+            return fragment;
+        }
+        @Override
+        public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+            switch (requestCode) {
+                case REQUEST_PERMISSION_ACCESS_COARSE_LOCATION:
+                    // If request is cancelled, the result arrays are empty.
+                    if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                        // Permission was granted, yay!
+                        initEmpaticaDeviceManager();
+                    } else {
+                        // Permission denied, boo!
+                        final boolean needRationale = ActivityCompat.shouldShowRequestPermissionRationale(getActivity(), Manifest.permission.ACCESS_COARSE_LOCATION);
+                        new AlertDialog.Builder(getActivity())
+                                .setTitle("Permission required")
+                                .setMessage("Without this permission bluetooth low energy devices cannot be found, allow it in order to connect to the device.")
+                                .setPositiveButton("Retry", new DialogInterface.OnClickListener() {
+                                    public void onClick(DialogInterface dialog, int which) {
+                                        // try again
+                                        if (needRationale) {
+                                            // the "never ask again" flash is not set, try again with permission request
+                                            initEmpaticaDeviceManager();
+                                        } else {
+                                            // the "never ask again" flag is set so the permission requests is disabled, try open app settings to enable the permission
+                                            Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                                            Uri uri = Uri.fromParts("package", getActivity().getPackageName(), null);
+                                            intent.setData(uri);
+                                            startActivity(intent);
+                                        }
+                                    }
+                                })
+                                .setNegativeButton("Exit application", new DialogInterface.OnClickListener() {
+                                    public void onClick(DialogInterface dialog, int which) {
+                                        // without permission exit is the only way
+                                        getActivity().finish();
+                                    }
+                                })
+                                .show();
+                    }
+                    break;
+            }
+        }
+
+        private void initEmpaticaDeviceManager() {
+            // Android 6 (API level 23) now require ACCESS_COARSE_LOCATION permission to use BLE
+            if (ContextCompat.checkSelfPermission(getActivity(), Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(getActivity(), new String[] { Manifest.permission.ACCESS_COARSE_LOCATION }, REQUEST_PERMISSION_ACCESS_COARSE_LOCATION);
+            } else {
+                // Create a new EmpaDeviceManager. MainActivity is both its data and status delegate.
+                deviceManager = new EmpaDeviceManager(getActivity().getApplicationContext(), this, this);
+
+                if (TextUtils.isEmpty(EMPATICA_API_KEY)) {
+                    new AlertDialog.Builder(getActivity())
+                            .setTitle("Warning")
+                            .setMessage("Please insert your API KEY")
+                            .setNegativeButton("Close", new DialogInterface.OnClickListener() {
+                                public void onClick(DialogInterface dialog, int which) {
+                                    // without permission exit is the only way
+                                    getActivity().finish();
+                                }
+                            })
+                            .show();
+                    return;
+                }
+                // Initialize the Device Manager using your API key. You need to have Internet access at this point.
+                deviceManager.authenticateWithAPIKey(EMPATICA_API_KEY);
+            }
+        }
+
+        @Override
+        public void onPause() {
+            super.onPause();
+            if (deviceManager != null) {
+                deviceManager.stopScanning();
+            }
+        }
+
+        @Override
+        public void onDestroy() {
+            super.onDestroy();
+            if (deviceManager != null) {
+                deviceManager.cleanUp();
+            }
+        }
+
+        @Override
+        public void didDiscoverDevice(BluetoothDevice bluetoothDevice, String deviceName, int rssi, boolean allowed) {
+            // Check if the discovered device can be used with your API key. If allowed is always false,
+            // the device is not linked with your API key. Please check your developer area at
+            // https://www.empatica.com/connect/developer.php
+            if (allowed) {
+                // Stop scanning. The first allowed device will do.
+                deviceManager.stopScanning();
+                try {
+                    // Connect to the device
+                    deviceManager.connectDevice(bluetoothDevice);
+                    updateLabel(deviceNameLabel, "To: " + deviceName);
+                } catch (ConnectionNotAllowedException e) {
+                    // This should happen only if you try to connect when allowed == false.
+                    Toast.makeText(getActivity(), "Sorry, you can't connect to this device", Toast.LENGTH_SHORT).show();
+                }
+            }
+        }
+
+        @Override
+        public void didRequestEnableBluetooth() {
+            // Request the user to enable Bluetooth
+            Intent enableBtIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
+            startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT);
+        }
+
+        @Override
+        public void onActivityResult(int requestCode, int resultCode, Intent data) {
+            // The user chose not to enable Bluetooth
+            if (requestCode == REQUEST_ENABLE_BT && resultCode == Activity.RESULT_CANCELED) {
+                // You should deal with this
+                return;
+            }
+            super.onActivityResult(requestCode, resultCode, data);
+        }
+
+        @Override
+        public void didUpdateSensorStatus(EmpaSensorStatus status, EmpaSensorType type) {
+            // No need to implement this right now
+        }
+
+        @Override
+        public void didUpdateStatus(EmpaStatus status) {
+            // Update the UI
+            updateLabel(statusLabel, status.name());
+
+            // The device manager is ready for use
+            if (status == EmpaStatus.READY) {
+                updateLabel(statusLabel, status.name() + " - Turn on your device");
+                // Start scanning
+                deviceManager.startScanning();
+                // The device manager has established a connection
+            } else if (status == EmpaStatus.CONNECTED) {
+                // Stop streaming after STREAMING_TIME
+                ((MainActivity)getActivity()).saveSession(0,0);
+                getActivity().runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        dataCnt.setVisibility(View.VISIBLE);
+                        new Handler().postDelayed(new Runnable() {
+                            @Override
+                            public void run() {
+                                // Disconnect device
+                                deviceManager.disconnect();
+                            }
+                        }, STREAMING_TIME);
+                    }
+                });
+                // The device manager disconnected from a device
+            } else if (status == EmpaStatus.DISCONNECTED) {
+                updateLabel(deviceNameLabel, "");
+            }
+        }
+
+        @Override
+        public void didReceiveAcceleration(int x, int y, int z, double timestamp) {
+            updateLabel(accel_xLabel, "" + x);
+            updateLabel(accel_yLabel, "" + y);
+            updateLabel(accel_zLabel, "" + z);
+        }
+
+        @Override
+        public void didReceiveBVP(float bvp, double timestamp) {
+            updateLabel(bvpLabel, "" + bvp);
+            ((MainActivity)getActivity()).saveSession(1,bvp);
+            ((MainActivity)getActivity()).updateGraph(bvp, ((MainActivity)getActivity()).mChart1, "BVP");
+            ((MainActivity)getActivity()).updateGraph(bvp, ((MainActivity)getActivity()).mChart3, "HR");
+        }
+
+        @Override
+        public void didReceiveBatteryLevel(float battery, double timestamp) {
+            updateLabel(batteryLabel, String.format("%.0f %%", battery * 100));
+        }
+
+        @Override
+        public void didReceiveGSR(float gsr, double timestamp) {
+            updateLabel(edaLabel, "" + gsr);
+            ((MainActivity)getActivity()).saveSession(2,gsr);
+            ((MainActivity)getActivity()).updateGraph(gsr, ((MainActivity)getActivity()).mChart2, "EDA");
+        }
+
+        @Override
+        public void didReceiveIBI(float ibi, double timestamp) {
+            updateLabel(ibiLabel, "" + ibi);
+            ((MainActivity)getActivity()).saveSession(4,ibi);
+            ((MainActivity)getActivity()).updateGraph(ibi, ((MainActivity)getActivity()).mChart4, "EDA");
+            ((MainActivity)getActivity()).hrData = ((1/ibi)*60);
+            ((MainActivity)getActivity()).saveSession(3,((MainActivity)getActivity()).hrData);
+
+        }
+
+        @Override
+        public void didReceiveTemperature(float temp, double timestamp) {
+            updateLabel(temperatureLabel, "" + temp);
+        }
+
+        // Update a label with some text, making sure this is run in the UI thread
+        private void updateLabel(final TextView label, final String text) {
+            getActivity().runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    label.setText(text);
+                }
+            });
+        }
+        @Override
+        public View onCreateView(LayoutInflater inflater, ViewGroup container,
+                                 Bundle savedInstanceState) {
+            View rootView = inflater.inflate(R.layout.content_main, container, false);
+            // Initialize vars that reference UI components
+            statusLabel = (TextView) rootView.findViewById(R.id.status);
+            dataCnt = (RelativeLayout) rootView.findViewById(R.id.dataArea);
+            accel_xLabel = (TextView) rootView.findViewById(R.id.accel_x);
+            accel_yLabel = (TextView) rootView.findViewById(R.id.accel_y);
+            accel_zLabel = (TextView) rootView.findViewById(R.id.accel_z);
+            bvpLabel = (TextView) rootView.findViewById(R.id.bvp);
+            edaLabel = (TextView) rootView.findViewById(R.id.eda);
+            ibiLabel = (TextView) rootView.findViewById(R.id.ibi);
+            temperatureLabel = (TextView) rootView.findViewById(R.id.temperature);
+            batteryLabel = (TextView) rootView.findViewById(R.id.battery);
+            deviceNameLabel = (TextView) rootView.findViewById(R.id.deviceName);
+
+            initEmpaticaDeviceManager();
+//            TextView textView = (TextView) rootView.findViewById(R.id.section_label);
+//            textView.setText(getString(R.string.section_format, getArguments().getInt(ARG_SECTION_NUMBER)));
+            return rootView;
+        }
+    }
+
+    public static class BVPGraph extends Fragment {
+        /**
+         * The fragment argument representing the section number for this
+         * fragment.
+         */
+        ;
+
+        public BVPGraph() {
+
+
+        }
+        /**
+         * Returns a new instance of this fragment for the given section
+         * number.
+         */
+        public static BVPGraph newInstance(int sectionNumber) {
+            BVPGraph fragment = new BVPGraph();
+            return fragment;
+        }
+
+        @Override
+        public View onCreateView(LayoutInflater inflater, ViewGroup container,
+                                 Bundle savedInstanceState) {
+            View rootView = inflater.inflate(R.layout.graphs, container, false);
+            // get a layout defined in xml
+            RelativeLayout rl = (RelativeLayout) rootView.findViewById(R.id.graph);
+
+            ((MainActivity)getActivity()).mChart1.setLayoutParams(new RelativeLayout.LayoutParams(RelativeLayout.LayoutParams.MATCH_PARENT, RelativeLayout.LayoutParams.MATCH_PARENT));
+
+            rl.addView(((MainActivity)getActivity()).mChart1);
+
+            return rootView;
+        }
+
+        @Override
+        public void onActivityCreated(@Nullable Bundle savedInstanceState) {
+            super.onActivityCreated(savedInstanceState);
+
+
+        }
+    }
+
+    public static class EDAGraph extends Fragment {
+        /**
+         * The fragment argument representing the section number for this
+         * fragment.
+         */
+        ;
+
+        public EDAGraph() {
+        }
+
+        /**
+         * Returns a new instance of this fragment for the given section
+         * number.
+         */
+        public static EDAGraph newInstance(int sectionNumber) {
+            EDAGraph fragment = new EDAGraph();
+            return fragment;
+        }
+
+        @Override
+        public View onCreateView(LayoutInflater inflater, ViewGroup container,
+                                 Bundle savedInstanceState) {
+
+            View rootView = inflater.inflate(R.layout.graphs, container, false);
+
+            // get a layout defined in xml
+            RelativeLayout rl = (RelativeLayout) rootView.findViewById(R.id.graph);
+
+            ((MainActivity)getActivity()).mChart2.setLayoutParams(new RelativeLayout.LayoutParams(RelativeLayout.LayoutParams.MATCH_PARENT, RelativeLayout.LayoutParams.MATCH_PARENT));
+
+            rl.addView(((MainActivity)getActivity()).mChart2);
+
+
+            return rootView;
+        }
+    }
+
+    public static class HRGraph extends Fragment {
+        /**
+         * The fragment argument representing the section number for this
+         * fragment.
+         */
+        ;
+        private LineChart mChart3;
+        public HRGraph() {
+        }
+
+        public static HRGraph newInstance(int sectionNumber) {
+            HRGraph fragment = new HRGraph();
+            return fragment;
+        }
+
+        @Override
+        public View onCreateView(LayoutInflater inflater, ViewGroup container,
+                                 Bundle savedInstanceState) {
+
+            View rootView = inflater.inflate(R.layout.graphs, container, false);
+
+            // get a layout defined in xml
+            RelativeLayout rl = (RelativeLayout) rootView.findViewById(R.id.graph);
+
+            ((MainActivity)getActivity()).mChart3.setLayoutParams(new RelativeLayout.LayoutParams(RelativeLayout.LayoutParams.MATCH_PARENT, RelativeLayout.LayoutParams.MATCH_PARENT));
+
+            rl.addView(((MainActivity)getActivity()).mChart3);
+
+
+            return rootView;
+        }
+    }
+
+    public static class IBIGraph extends Fragment {
+        /**
+         * The fragment argument representing the section number for this
+         * fragment.
+         */
+        ;
+
+        public IBIGraph() {
+        }
+
+        /**
+         * Returns a new instance of this fragment for the given section
+         * number.
+         */
+        public static IBIGraph newInstance(int sectionNumber) {
+            IBIGraph fragment = new IBIGraph();
+            return fragment;
+        }
+
+        @Override
+        public View onCreateView(LayoutInflater inflater, ViewGroup container,
+                                 Bundle savedInstanceState) {
+
+            View rootView = inflater.inflate(R.layout.graphs, container, false);
+
+            // get a layout defined in xml
+            RelativeLayout rl = (RelativeLayout) rootView.findViewById(R.id.graph);
+
+            ((MainActivity)getActivity()).mChart4.setLayoutParams(new RelativeLayout.LayoutParams(RelativeLayout.LayoutParams.MATCH_PARENT, RelativeLayout.LayoutParams.MATCH_PARENT));
+
+            rl.addView(((MainActivity)getActivity()).mChart4);
+
+
+            return rootView;
+        }
+    }
+
+
+
+    /**
+     * A {@link FragmentPagerAdapter} that returns a fragment corresponding to
+     * one of the sections/tabs/pages.
+     */
+    public class SectionsPagerAdapter extends FragmentPagerAdapter {
+
+        public SectionsPagerAdapter(FragmentManager fm) {
+            super(fm);
+        }
+
+        @Override
+        public Fragment getItem(int position) {
+            // getItem is called to instantiate the fragment for the given page.
+            Fragment fragment;
+            switch (position) {
+                case 0:
+                    fragment = PlaceholderFragment.newInstance(position + 1);
+                    break;
+                case 1:
+                    fragment = BVPGraph.newInstance(position + 1);
+                    break;
+                case 2:
+                    fragment = EDAGraph.newInstance(position + 1);
+                    break;
+                case 3:
+                    fragment = HRGraph.newInstance(position + 1);
+                    break;
+                case 4:
+                    fragment = IBIGraph.newInstance(position + 1);
+                    break;
+                default:
+                    fragment = PlaceholderFragment.newInstance(position + 1);
+                    break;
+
+            }
+            return fragment;
+        }
+
+        @Override
+        public int getCount() {
+            // Show 5 total pages.
+            return 5;
+        }
+
+        @Override
+        public CharSequence getPageTitle(int position) {
+            switch (position) {
+                case 0:
+                    return "DATA";
+                case 1:
+                    return "BVP";
+                case 2:
+                    return "EDA";
+                case 3:
+                    return "HR";
+                case 4:
+                    return "IBI";
+            }
+            return null;
+        }
+    }
+}

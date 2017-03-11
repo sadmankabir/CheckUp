@@ -1,0 +1,23 @@
+<resources>
+    <string name="app_name">CheckUp</string>
+
+    <string name="navigation_drawer_open">Open navigation drawer</string>
+    <string name="navigation_drawer_close">Close navigation drawer</string>
+
+    <string name="action_settings">Settings</string>
+    <string name="past_sessions">Past Sessions</string>
+
+    <string name="accel">Accelerometers</string>
+    <string name="accel_x">x:</string>
+    <string name="accel_y">y:</string>
+    <string name="accel_z">z:</string>
+    <string name="bvp_label">BVP</string>
+    <string name="bvpfiltered_label">BVP Filtered</string>
+    <string name="eda_label">EDA</string>
+    <string name="ibi_label">IBI</string>
+    <string name="emptyText">-</string>
+    <string name="temp_label">Temperature</string>
+    <string name="battery_label">Battery</string>
+    <string name="email_name">Developer</string>
+    <string name="email">checkup@empatica.com</string>
+</resources>
