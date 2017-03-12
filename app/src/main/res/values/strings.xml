@@ -20,4 +20,11 @@
     <string name="battery_label">Battery</string>
     <string name="email_name">Developer</string>
     <string name="email">checkup@empatica.com</string>
+    <string name="label_data_to_target" />
+    <string name="hint_target_ip" />
+    <string name="hint_target_port" />
+    <string name="default_text" />
+    <string name="error_warningwifi" />
+    <string name="error_invalidaddr" />
+    <string name="error_neterror" />
 </resources>

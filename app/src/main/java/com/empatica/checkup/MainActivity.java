@@ -127,7 +127,7 @@ public class MainActivity extends AppCompatActivity
         mChart1 = createGraph(mChart1, "BVP");
 
         mChart2 = new LineChart(this);
-        mChart2 = createGraph(mChart2, "EDA");
+        mChart2 = createGraph(mChart2, "BVP-F");
 
         mChart3 = new LineChart(this);
         mChart3 = createGraph(mChart3, "HR");
@@ -370,22 +370,11 @@ public class MainActivity extends AppCompatActivity
                 data.addDataSet(set);
             }
 
-            if(name == "HR"){
-                if(hrData <=59)
-                {
-                    data.addXValue("");
-                    data.addEntry(new Entry(60, set.getEntryCount()), 0);
-                }
-                else {
-                    data.addXValue("");
-                    data.addEntry(new Entry(hrData, set.getEntryCount()), 0);
-                }
-            }else{
-                // adding x value to the data set
-                data.addXValue("");
-                //adding new x value to the data set
-                data.addEntry(new Entry(val,set.getEntryCount()),0);
-            }
+
+            // adding x value to the data set
+            data.addXValue("");
+            //adding new x value to the data set
+            data.addEntry(new Entry(val,set.getEntryCount()),0);
             //notify chart data has changed
             mChart.notifyDataSetChanged();
             mChart.setVisibleXRange(1,20);
@@ -416,7 +405,7 @@ public class MainActivity extends AppCompatActivity
                     if (n == 0) {
                         updateGraph((float) cell.getNumericCellValue(), mChart1, "BVP");
                     }else if (n == 1) {
-                        updateGraph((float) cell.getNumericCellValue(), mChart2, "EDA");
+                        updateGraph((float) cell.getNumericCellValue(), mChart2, "BVP-F");
                     }else if (n == 2) {
                         updateGraph((float) cell.getNumericCellValue(), mChart3, "HR");
                     }else if (n == 3) {
@@ -521,11 +510,25 @@ public class MainActivity extends AppCompatActivity
         private TextView bvpLabel;
         private TextView edaLabel;
         private TextView ibiLabel;
+        private TextView bvpfilter;
+        private TextView ibifiltered;
         private TextView temperatureLabel;
         private TextView batteryLabel;
         private TextView statusLabel;
         private TextView deviceNameLabel;
         private RelativeLayout dataCnt;
+        private TextView HRData;
+
+        private float ibiData=0;
+        private int count = 0;
+        private int ibi_counter = 0;
+        private float bvp_total = 0;
+        private float bvp_filtered = 0;
+        private float[] filtered_array = new float[20];
+        private double[] filteredtimestamp_array = new double[20];
+        private float calculated_ibi = 0;
+
+
         public PlaceholderFragment() {
         }
 
@@ -705,9 +708,192 @@ public class MainActivity extends AppCompatActivity
         @Override
         public void didReceiveBVP(float bvp, double timestamp) {
             updateLabel(bvpLabel, "" + bvp);
+            filteredBVP(bvp,timestamp);
             ((MainActivity)getActivity()).saveSession(1,bvp);
             ((MainActivity)getActivity()).updateGraph(bvp, ((MainActivity)getActivity()).mChart1, "BVP");
             ((MainActivity)getActivity()).updateGraph(bvp, ((MainActivity)getActivity()).mChart3, "HR");
+        }
+
+        public void filteredBVP(float bvp, double timestamp) {
+            if (count < 10) {
+                bvp_total = bvp + bvp_total;
+                count+=1;
+            } else {
+                bvp_filtered = (bvp_total/10);
+                double timestamp2 = System.currentTimeMillis() / 1000;
+                filteredIBI(bvp_filtered, timestamp2);
+                updateLabel(bvpfilter, "" + bvp_filtered);
+
+                ((MainActivity)getActivity()).saveSession(2,bvp_filtered);
+                ((MainActivity)getActivity()).updateGraph(bvp_filtered, ((MainActivity)getActivity()).mChart2, "BVP-F");
+                count = 0;
+            }
+        }
+
+        public void filteredIBI(float bvp, double timestamp) {
+            filtered_array[ibi_counter] = bvp;
+            filteredtimestamp_array[ibi_counter] = timestamp;
+            double temp_ibi = 0;
+            int indexMax1 = 0;   float max1=0;
+            int indexMax2 = 0;   float max2=0;
+            if (ibi_counter >= 19) {
+                //for case 1 and 2, where the array end maxes
+                for(int i = 0; i <=filtered_array.length-1;i++) {
+                    if(filtered_array[i] > max1) {
+                        max1 = filtered_array[i];
+                        indexMax1 = i;
+                    }
+                }
+                //case 1
+                if(indexMax1 == 0)
+                {
+                    int visited_1 =0;
+                    for(int j=1; j <= filtered_array.length-1; j++) {
+                        if(j!=filtered_array.length-1) {
+                            for(int k=1; k < filtered_array.length-2; k++){
+                                if((filtered_array[k] > filtered_array[k-1]) && (filtered_array[k] > filtered_array[k+1])) {
+                                    max2 = filtered_array[k];
+                                    indexMax2 = k;
+                                    visited_1 ++;
+                                    break;
+                                }
+                            }
+                        }
+                        if(visited_1 > 0)
+                            break;
+                        if (j == filtered_array.length-1) {
+                            visited_1 = 0;
+                            max2 = filtered_array[j];
+                            indexMax2 = j;
+                            for(int k=1; k <= filtered_array.length-2; k++)
+                            {
+                                if(filtered_array[k] > filtered_array[j]) {
+                                    max2 = filtered_array[k];
+                                    indexMax2 = k;
+                                    visited_1 ++;
+                                    break;
+                                }
+                            }
+                        }
+                        if(visited_1 == 0){
+                            break;
+                        }
+                    }
+
+                }
+                //case 2
+                if(indexMax1 == (filtered_array.length-1))
+                {
+                    int visited_2 = 0;
+                    for(int j=0; j <= filtered_array.length-2; j++)
+                    {
+                        if(j == 0) {
+                            indexMax2 = j;
+                            max2 = filtered_array[j];
+                            for(int k=1; k <= filtered_array.length-2; k++)
+                            {
+                                if(filtered_array[k] > filtered_array[j]) {
+                                    max2 = filtered_array[j];
+                                    indexMax2 = j;
+                                    visited_2 ++;
+                                    break;
+                                }
+                            }
+                        }
+                        if(visited_2 == 0)
+                            break;
+                        if(j>0)
+                        {
+                            visited_2 = 0;
+                            for(int k=1; k <= filtered_array.length-2; k++){
+                                if((filtered_array[k] > filtered_array[k-1]) && (filtered_array[k] > filtered_array[k+1])) {
+                                    max2 = filtered_array[k];
+                                    indexMax2 = k;
+                                    visited_2 ++;
+                                    break;
+                                }
+                            }
+                        }
+                        if(visited_2 > 0) {
+                            break;
+                        }
+                    }
+                }
+                //case 3
+                if(indexMax1 != 0 && indexMax1 != filtered_array.length-1) {
+                    int visited = 0;
+                    for (int k=0; k <= filtered_array.length-1;k++) {
+                        if (k==0) {
+                            max2 = filtered_array[k];
+                            indexMax2 = k;
+                            for(int l=1; l <= filtered_array.length-1; l++)
+                            {
+                                if(filtered_array[l] > filtered_array[k]) {
+                                    max2 = filtered_array[l];
+                                    indexMax2 = l;
+                                    visited++;
+                                    break;
+                                }
+                            }
+                        }
+                        if(visited == 0)
+                            break;
+                        if(k>0)
+                        {
+                            visited = 0;
+                            for(int l=1; l < filtered_array.length-2; l++){
+                                if(l != indexMax1){
+                                    if((filtered_array[l] > filtered_array[l-1]) && (filtered_array[l] > filtered_array[l+1])) {
+                                        max2 = filtered_array[l];
+                                        indexMax2 = l;
+                                        visited ++;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        if(visited > 0)
+                            break;
+                        if (k==filtered_array.length-1) {
+                            visited = 0;
+                            for(int l=0; l < filtered_array.length-2; l++)
+                            {
+                                max2 = filtered_array[k];
+                                indexMax2 = k;
+                                if(filtered_array[l] > filtered_array[k]) {
+                                    max2 = filtered_array[l];
+                                    indexMax2 = l;
+                                    visited ++;
+                                    break;
+                                }
+                            }
+                        }
+                        if(visited == 0) {
+                            break;
+                        }
+
+                    }
+                }
+                if (indexMax1 > indexMax2) {
+                    temp_ibi = filteredtimestamp_array[indexMax1] - filteredtimestamp_array[indexMax2];
+                    calculated_ibi = (float)temp_ibi;
+                /*if(calculated_ibi > 1.2 || calculated_ibi < 0.6) {
+                    double random = Math.random() * 1.1 + 0.7;
+                    calculated_ibi = (float)random;
+                }*/
+                    updateLabel(ibifiltered, "" + String.format("%.2f", calculated_ibi));
+                } else {
+                    temp_ibi = filteredtimestamp_array[indexMax2] - filteredtimestamp_array[indexMax1];
+                    calculated_ibi = (float)temp_ibi;
+                /*if(calculated_ibi > 1.2 || calculated_ibi < 0.6) {
+                    double random = Math.random() * 1.1 + 0.7;
+                    calculated_ibi = (float)random;
+                }*/
+                    updateLabel(ibifiltered, "" + String.format("%.2f", calculated_ibi));
+                }
+                ibi_counter = 0;
+            }
+            ibi_counter ++;
         }
 
         @Override
@@ -718,18 +904,16 @@ public class MainActivity extends AppCompatActivity
         @Override
         public void didReceiveGSR(float gsr, double timestamp) {
             updateLabel(edaLabel, "" + gsr);
-            ((MainActivity)getActivity()).saveSession(2,gsr);
-            ((MainActivity)getActivity()).updateGraph(gsr, ((MainActivity)getActivity()).mChart2, "EDA");
         }
 
         @Override
         public void didReceiveIBI(float ibi, double timestamp) {
             updateLabel(ibiLabel, "" + ibi);
             ((MainActivity)getActivity()).saveSession(4,ibi);
-            ((MainActivity)getActivity()).updateGraph(ibi, ((MainActivity)getActivity()).mChart4, "EDA");
+            ((MainActivity)getActivity()).updateGraph(ibi, ((MainActivity)getActivity()).mChart4, "IBI");
             ((MainActivity)getActivity()).hrData = ((1/ibi)*60);
+             updateLabel(HRData, "" + ((MainActivity)getActivity()).hrData);
             ((MainActivity)getActivity()).saveSession(3,((MainActivity)getActivity()).hrData);
-
         }
 
         @Override
@@ -757,11 +941,14 @@ public class MainActivity extends AppCompatActivity
             accel_yLabel = (TextView) rootView.findViewById(R.id.accel_y);
             accel_zLabel = (TextView) rootView.findViewById(R.id.accel_z);
             bvpLabel = (TextView) rootView.findViewById(R.id.bvp);
+            bvpfilter = (TextView) rootView.findViewById(R.id.bvp_filtered);
+            ibifiltered = (TextView) rootView.findViewById(R.id.ibi_filtered);
             edaLabel = (TextView) rootView.findViewById(R.id.eda);
             ibiLabel = (TextView) rootView.findViewById(R.id.ibi);
             temperatureLabel = (TextView) rootView.findViewById(R.id.temperature);
             batteryLabel = (TextView) rootView.findViewById(R.id.battery);
             deviceNameLabel = (TextView) rootView.findViewById(R.id.deviceName);
+            HRData = (TextView) rootView.findViewById(R.id.HRV);
 
             initEmpaticaDeviceManager();
 //            TextView textView = (TextView) rootView.findViewById(R.id.section_label);
@@ -812,22 +999,22 @@ public class MainActivity extends AppCompatActivity
         }
     }
 
-    public static class EDAGraph extends Fragment {
+    public static class BVPFGraph extends Fragment {
         /**
          * The fragment argument representing the section number for this
          * fragment.
          */
         ;
 
-        public EDAGraph() {
+        public BVPFGraph() {
         }
 
         /**
          * Returns a new instance of this fragment for the given section
          * number.
          */
-        public static EDAGraph newInstance(int sectionNumber) {
-            EDAGraph fragment = new EDAGraph();
+        public static BVPFGraph newInstance(int sectionNumber) {
+            BVPFGraph fragment = new BVPFGraph();
             return fragment;
         }
 
@@ -943,7 +1130,7 @@ public class MainActivity extends AppCompatActivity
                     fragment = BVPGraph.newInstance(position + 1);
                     break;
                 case 2:
-                    fragment = EDAGraph.newInstance(position + 1);
+                    fragment = BVPFGraph.newInstance(position + 1);
                     break;
                 case 3:
                     fragment = HRGraph.newInstance(position + 1);
@@ -973,7 +1160,7 @@ public class MainActivity extends AppCompatActivity
                 case 1:
                     return "BVP";
                 case 2:
-                    return "EDA";
+                    return "BVP-F";
                 case 3:
                     return "HR";
                 case 4:

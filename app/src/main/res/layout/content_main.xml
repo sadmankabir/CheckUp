@@ -101,9 +101,24 @@
             android:text="@string/emptyText"/>
 
         <TextView
-            android:id="@+id/eda_label"
+            android:id="@+id/bvp_label_filtered"
             android:layout_marginTop="10dp"
             android:layout_below="@id/bvp"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="BVP Filtered" />
+
+        <TextView
+            android:layout_below="@id/bvp_label_filtered"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:id="@+id/bvp_filtered"
+            android:text="@string/emptyText"/>
+
+        <TextView
+            android:id="@+id/eda_label"
+            android:layout_marginTop="10dp"
+            android:layout_below="@id/bvp_filtered"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/eda_label" />
@@ -131,9 +146,39 @@
             android:text="@string/emptyText"/>
 
         <TextView
-            android:id="@+id/temp_label"
+            android:id="@+id/ibi_label_Filtered"
             android:layout_marginTop="10dp"
             android:layout_below="@id/ibi"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="IBI Filtered" />
+
+        <TextView
+            android:layout_below="@id/ibi_label_Filtered"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:id="@+id/ibi_filtered"
+            android:text="@string/emptyText"/>
+
+        <TextView
+            android:id="@+id/Hr_Label"
+            android:layout_marginTop="10dp"
+            android:layout_below="@id/ibi_filtered"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Heart Rate" />
+
+        <TextView
+            android:layout_below="@id/Hr_Label"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:id="@+id/HRV"
+            android:text="@string/emptyText"/>
+
+        <TextView
+            android:id="@+id/temp_label"
+            android:layout_marginTop="10dp"
+            android:layout_below="@id/HRV"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/temp_label" />

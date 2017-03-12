@@ -29,6 +29,7 @@ import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.Button;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -78,8 +79,6 @@ public class PatientView extends AppCompatActivity
 
     private SectionsPagerAdapter mSectionsPagerAdapter;
     private ViewPager mViewPager;
-
-    private float hrData =0;
     public File dirFile = null;
 
     @Override
@@ -366,7 +365,20 @@ public class PatientView extends AppCompatActivity
         private TextView batteryLabel;
         private TextView statusLabel;
         private TextView deviceNameLabel;
+        private TextView bvpfilter;
+        private TextView ibifiltered;
+        private TextView HRData;
         private RelativeLayout dataCnt;
+        private float hrData =0;
+        private float ibiData=0;
+        private int count = 0;
+        private int ibi_counter = 0;
+        private float bvp_total = 0;
+        private float bvp_filtered = 0;
+        private float[] filtered_array = new float[20];
+        private double[] filteredtimestamp_array = new double[20];
+        private float calculated_ibi = 0;
+
         public PlaceholderFragment() {
         }
 
@@ -546,7 +558,185 @@ public class PatientView extends AppCompatActivity
         @Override
         public void didReceiveBVP(float bvp, double timestamp) {
             updateLabel(bvpLabel, "" + bvp);
+            filteredBVP(bvp,timestamp);
+
             ((PatientView)getActivity()).saveSession(1,bvp);
+        }
+
+        public void filteredBVP(float bvp, double timestamp) {
+            if (count < 10) {
+                bvp_total = bvp + bvp_total;
+                count+=1;
+            } else {
+                bvp_filtered = (bvp_total/10);
+                double timestamp2 = System.currentTimeMillis() / 1000;
+                filteredIBI(bvp_filtered, timestamp2);
+                updateLabel(bvpfilter, "" + bvp_filtered);
+
+                count = 0;
+            }
+        }
+
+        public void filteredIBI(float bvp, double timestamp) {
+            filtered_array[ibi_counter] = bvp;
+            filteredtimestamp_array[ibi_counter] = timestamp;
+            double temp_ibi = 0;
+            int indexMax1 = 0;   float max1=0;
+            int indexMax2 = 0;   float max2=0;
+            if (ibi_counter >= 19) {
+                //for case 1 and 2, where the array end maxes
+                for(int i = 0; i <=filtered_array.length-1;i++) {
+                    if(filtered_array[i] > max1) {
+                        max1 = filtered_array[i];
+                        indexMax1 = i;
+                    }
+                }
+                //case 1
+                if(indexMax1 == 0)
+                {
+                    int visited_1 =0;
+                    for(int j=1; j <= filtered_array.length-1; j++) {
+                        if(j!=filtered_array.length-1) {
+                            for(int k=1; k < filtered_array.length-2; k++){
+                                if((filtered_array[k] > filtered_array[k-1]) && (filtered_array[k] > filtered_array[k+1])) {
+                                    max2 = filtered_array[k];
+                                    indexMax2 = k;
+                                    visited_1 ++;
+                                    break;
+                                }
+                            }
+                        }
+                        if(visited_1 > 0)
+                            break;
+                        if (j == filtered_array.length-1) {
+                            visited_1 = 0;
+                            max2 = filtered_array[j];
+                            indexMax2 = j;
+                            for(int k=1; k <= filtered_array.length-2; k++)
+                            {
+                                if(filtered_array[k] > filtered_array[j]) {
+                                    max2 = filtered_array[k];
+                                    indexMax2 = k;
+                                    visited_1 ++;
+                                    break;
+                                }
+                            }
+                        }
+                        if(visited_1 == 0){
+                            break;
+                        }
+                    }
+
+                }
+                //case 2
+                if(indexMax1 == (filtered_array.length-1))
+                {
+                    int visited_2 = 0;
+                    for(int j=0; j <= filtered_array.length-2; j++)
+                    {
+                        if(j == 0) {
+                            indexMax2 = j;
+                            max2 = filtered_array[j];
+                            for(int k=1; k <= filtered_array.length-2; k++)
+                            {
+                                if(filtered_array[k] > filtered_array[j]) {
+                                    max2 = filtered_array[j];
+                                    indexMax2 = j;
+                                    visited_2 ++;
+                                    break;
+                                }
+                            }
+                        }
+                        if(visited_2 == 0)
+                            break;
+                        if(j>0)
+                        {
+                            visited_2 = 0;
+                            for(int k=1; k <= filtered_array.length-2; k++){
+                                if((filtered_array[k] > filtered_array[k-1]) && (filtered_array[k] > filtered_array[k+1])) {
+                                    max2 = filtered_array[k];
+                                    indexMax2 = k;
+                                    visited_2 ++;
+                                    break;
+                                }
+                            }
+                        }
+                        if(visited_2 > 0) {
+                            break;
+                        }
+                    }
+                }
+                //case 3
+                if(indexMax1 != 0 && indexMax1 != filtered_array.length-1) {
+                    int visited = 0;
+                    for (int k=0; k <= filtered_array.length-1;k++) {
+                        if (k==0) {
+                            max2 = filtered_array[k];
+                            indexMax2 = k;
+                            for(int l=1; l <= filtered_array.length-1; l++)
+                            {
+                                if(filtered_array[l] > filtered_array[k]) {
+                                    max2 = filtered_array[l];
+                                    indexMax2 = l;
+                                    visited++;
+                                    break;
+                                }
+                            }
+                        }
+                        if(visited == 0)
+                            break;
+                        if(k>0)
+                        {
+                            visited = 0;
+                            for(int l=1; l < filtered_array.length-2; l++){
+                                if(l != indexMax1){
+                                    if((filtered_array[l] > filtered_array[l-1]) && (filtered_array[l] > filtered_array[l+1])) {
+                                        max2 = filtered_array[l];
+                                        indexMax2 = l;
+                                        visited ++;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        if(visited > 0)
+                            break;
+                        if (k==filtered_array.length-1) {
+                            visited = 0;
+                            for(int l=0; l < filtered_array.length-2; l++)
+                            {
+                                max2 = filtered_array[k];
+                                indexMax2 = k;
+                                if(filtered_array[l] > filtered_array[k]) {
+                                    max2 = filtered_array[l];
+                                    indexMax2 = l;
+                                    visited ++;
+                                    break;
+                                }
+                            }
+                        }
+                        if(visited == 0) {
+                            break;
+                        }
+
+                    }
+                }
+                if (indexMax1 > indexMax2) {
+                    temp_ibi = filteredtimestamp_array[indexMax1] - filteredtimestamp_array[indexMax2];
+                    calculated_ibi = (float)temp_ibi;
+                    updateLabel(ibifiltered, "" + String.format("%.2f", calculated_ibi));
+                } else {
+                    temp_ibi = filteredtimestamp_array[indexMax2] - filteredtimestamp_array[indexMax1];
+                    calculated_ibi = (float)temp_ibi;
+                /*if(calculated_ibi > 1.2 || calculated_ibi < 0.6) {
+                    double random = Math.random() * 1.1 + 0.7;
+                    calculated_ibi = (float)random;
+                }*/
+                    updateLabel(ibifiltered, "" + String.format("%.2f", calculated_ibi));
+                }
+                ibi_counter = 0;
+            }
+            ibi_counter ++;
         }
 
         @Override
@@ -564,8 +754,8 @@ public class PatientView extends AppCompatActivity
         public void didReceiveIBI(float ibi, double timestamp) {
             updateLabel(ibiLabel, "" + ibi);
             ((PatientView)getActivity()).saveSession(4,ibi);
-            ((PatientView)getActivity()).hrData = ((1/ibi)*60);
-            ((PatientView)getActivity()).saveSession(3,((PatientView)getActivity()).hrData);
+            hrData = ((1/ibi)*60);
+            ((PatientView)getActivity()).saveSession(3,hrData);
 
         }
 
@@ -594,6 +784,9 @@ public class PatientView extends AppCompatActivity
             accel_yLabel = (TextView) rootView.findViewById(R.id.accel_y);
             accel_zLabel = (TextView) rootView.findViewById(R.id.accel_z);
             bvpLabel = (TextView) rootView.findViewById(R.id.bvp);
+            bvpfilter = (TextView) rootView.findViewById(R.id.bvp_filtered);
+            ibifiltered = (TextView) rootView.findViewById(R.id.ibi_filtered);
+            HRData = (TextView) rootView.findViewById(R.id.HRV);
             edaLabel = (TextView) rootView.findViewById(R.id.eda);
             ibiLabel = (TextView) rootView.findViewById(R.id.ibi);
             temperatureLabel = (TextView) rootView.findViewById(R.id.temperature);
@@ -607,7 +800,54 @@ public class PatientView extends AppCompatActivity
         }
     }
 
+    public static class HeartRate extends Fragment {
+        /**
+         * The fragment argument representing the section number for this
+         * fragment.
+         */
+        ;
 
+        public HeartRate() {
+
+
+        }
+        /**
+         * Returns a new instance of this fragment for the given section
+         * number.
+         */
+        public static HeartRate newInstance(int sectionNumber) {
+            HeartRate fragment = new HeartRate();
+            return fragment;
+        }
+
+        @Override
+        public View onCreateView(LayoutInflater inflater, ViewGroup container,
+                                 Bundle savedInstanceState) {
+            View rootView = inflater.inflate(R.layout.hr, container, false);
+
+            // Locate the button in activity_main.xml
+            Button hr_button = (Button) rootView.findViewById(R.id.hr_button);
+            // Capture button clicks
+            hr_button.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View arg0) {
+
+                    // Start NewActivity.class
+                    Intent intent = new Intent(getActivity(), HeartRateMonitor.class);
+                    startActivity(intent);
+                }
+            });
+
+            return rootView;
+
+        }
+
+        @Override
+        public void onActivityCreated(@Nullable Bundle savedInstanceState) {
+            super.onActivityCreated(savedInstanceState);
+
+
+        }
+    }
 
     /**
      * A {@link FragmentPagerAdapter} that returns a fragment corresponding to
@@ -625,6 +865,9 @@ public class PatientView extends AppCompatActivity
             Fragment fragment;
             switch (position) {
                 case 0:
+                    fragment = HeartRate.newInstance(position + 1);
+                    break;
+                case 1:
                     fragment = PlaceholderFragment.newInstance(position + 1);
                     break;
                 default:
@@ -638,13 +881,15 @@ public class PatientView extends AppCompatActivity
         @Override
         public int getCount() {
             // Show 5 total pages.
-            return 1;
+            return 2;
         }
 
         @Override
         public CharSequence getPageTitle(int position) {
             switch (position) {
                 case 0:
+                    return "HR";
+                case 1:
                     return "DATA";
             }
             return null;
